@@ -25,8 +25,8 @@ To run the game, you need to have Rust installed. Once Rust is installed, you ca
 cargo run
 ```
 
-##Contributing
+## Contributing
 This is a pet project and its progress depends heavily on available free time. Contributions are welcome, though! Feel free to open issues or pull requests.
 
-##License
+## License
 This project is open-source and available under the [MIT License](https://www.mit.edu/~amini/LICENSE.md).
