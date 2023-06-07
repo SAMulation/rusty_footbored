@@ -23,7 +23,7 @@ To run the game, you need to have Rust installed. Once Rust is installed, you ca
 
 ```bash
 cargo run
-```bash
+```
 
 ##Contributing
 This is a pet project and its progress depends heavily on available free time. Contributions are welcome, though! Feel free to open issues or pull requests.
