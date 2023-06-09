@@ -1,4 +1,4 @@
-use crate::play::Play;
+use crate::{play::Play, player::Player};
 use rand::Rng;
 use std::{fmt::Display, vec};
 
@@ -12,18 +12,30 @@ const MULTI: [[f32; 4]; 5] = [
     [-1.0, 0.0, 0.5, 1.0],
 ];
 
+enum Score {
+    Touchdown,
+    Safety,
+    _FieldGoal,
+    _ExtraPoint,
+    _TwoPoint,
+}
+
 pub struct Game {
+    pub players: [Player; 2],
     pub game_over: bool,
     pub spot: u8,
     pub first_down: u8,
     mult_cards: Vec<u8>,
     yard_cards: Vec<u8>,
     pub off_num: u8,
+    pub down: u8,
+    recent_score: bool,
 }
 
 impl Game {
-    pub fn new() -> Self {
+    pub fn new(p1: Player, p2: Player) -> Self {
         Self {
+            players: [p1, p2],
             ..Default::default()
         }
     }
@@ -92,7 +104,20 @@ impl Game {
         self.mult_cards = vec![3, 4, 4, 4];
     }
 
+    pub fn change_poss(&mut self) {
+        if self.off_num == 1 {
+            self.off_num = 2;
+        } else {
+            self.off_num = 1;
+        }
+
+        // Reset spot
+        self.spot = 25;
+        self.first_down = 35;
+    }
+
     pub fn calc_dist(&mut self, p1: Play, p2: Play) {
+        let mut score: Option<Score> = None;
         let mult_card = self.draw_mult_card();
         println!("Multipler Card: {}", mult_card);
 
@@ -106,16 +131,16 @@ impl Game {
 
         println!("Yard Card: {}", yard_card);
         println!("Multiplier: {}", times);
-        let distance = (yard_card as f32 * times).ceil() as i8;
+        let mut distance = (yard_card as f32 * times).ceil() as i8;
 
-        // Check for touchdowns
-        if self.spot as i8 + distance >= 100 {
-            println!("This would be a touchdown!");
-        }
-
-        // Check for safeties
-        if self.spot as i8 + distance <= 0 {
-            println!("This would be a safety!");
+        // Check for touchdown
+        if distance + (self.spot as i8) > 100 {
+            distance = 100 - (self.spot as i8);
+            score = Some(Score::Touchdown); //self.score_touchdown(); // Maybe this part later?
+                                            // Check for safety
+        } else if distance + (self.spot as i8) < 0 {
+            distance = -(self.spot as i8);
+            score = Some(Score::Safety); //self.score_safety();
         }
 
         println!(
@@ -127,7 +152,17 @@ impl Game {
             }
         );
 
-        // self.spot = (self.spot as i8 + distance) as u8;
+        self.spot = (self.spot as i8 + distance) as u8;
+
+        if score.is_some() {
+            match score {
+                Some(Score::Touchdown) => self.score_touchdown(),
+                Some(Score::Safety) => self.score_safety(),
+                _ => unimplemented!(
+                    "How'd you get here? You scored something you shouldn't be able to!"
+                ),
+            }
+        }
     }
 
     fn calc_times(&self, p1: u8, p2: u8, mult_idx: u8) -> f32 {
@@ -152,17 +187,130 @@ impl Game {
 
         MULTI[_match_value as usize - 1][mult_idx as usize]
     }
+
+    pub fn score_touchdown(&mut self) {
+        self.players[Game::get_index(self.off_num)].score += 6;
+        println!(
+            "{} scored a touchdown!",
+            self.players[Game::get_index(self.off_num)].name
+        );
+        self.change_poss();
+        self.recent_score = true;
+    }
+
+    pub fn score_safety(&mut self) {
+        self.players[self.get_def_index()].score += 2;
+        println!(
+            "{} forced a safety!",
+            self.players[self.get_def_index()].name
+        );
+        self.change_poss();
+        self.recent_score = true;
+    }
+
+    fn get_index(num: u8) -> usize {
+        (num - 1) as usize
+    }
+
+    fn get_def_index(&self) -> usize {
+        let def = match self.off_num {
+            1 => 2,
+            _ => 1,
+        };
+        Game::get_index(def)
+    }
+
+    fn coin_flip() -> u8 {
+        rand::thread_rng().gen_range(0..1)
+    }
+
+    pub fn end_play(&mut self) {
+        let mut coin: u8 = 0;
+
+        // Avoid reporting and down changing for recent scores
+        if !self.recent_score {
+            // Sticks
+            if self.spot == self.first_down {
+                println!("Sticks...");
+                coin = Game::coin_flip();
+
+                if coin == 0 {
+                    println!("Almost!");
+                }
+            }
+
+            if self.spot > self.first_down || coin == 1 {
+                println!("First down!");
+                self.down = 1;
+
+                if self.spot > 90 {
+                    self.first_down = 100;
+                } else {
+                    self.first_down = self.spot + 10;
+                }
+
+                coin = 1;
+            }
+
+            if coin == 0 {
+                // && game.change_time !== Time::PEN_DOWN)
+                self.down += 1
+            }
+
+            if self.down > 4 {
+                // && !recentScore)
+                println!("Turnover on downs!!!");
+                self.change_poss();
+                self.down = 1
+            }
+
+            self.print_down();
+        } else {
+            self.recent_score = false;
+        }
+    }
+
+    fn print_down(&self) {
+        println!(
+            "{}{} & {}",
+            self.down,
+            Game::ending(self.down),
+            self.down_dist()
+        );
+    }
+
+    fn ending(down: u8) -> String {
+        match down {
+            1 => "st".to_string(),
+            2 => "nd".to_string(),
+            3 => "rd".to_string(),
+            _ => "th".to_string(),
+        }
+    }
+
+    fn down_dist(&self) -> String {
+        let difference = self.first_down - self.spot;
+
+        match difference {
+            100 => "G".to_string(),
+            _ if difference == 0 => "IN".to_string(),
+            _ => format!("{}", difference),
+        }
+    }
 }
 
 impl Default for Game {
     fn default() -> Self {
         Self {
+            players: [Player::default(), Player::default()],
             game_over: false,
-            spot: 65,
-            first_down: 75,
+            spot: 25,
+            first_down: 35,
             mult_cards: vec![3, 4, 4, 4],
             yard_cards: vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             off_num: 1,
+            down: 1,
+            recent_score: false,
         }
     }
 }
